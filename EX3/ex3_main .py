@@ -52,8 +52,18 @@ def hierarchicalkDemo(img_path):
     # Print the resulting translation matrix
     print("Real Translation matrix:")
     print(real_translation)
-    print("My predict Translation matrix:")
+    print("My predict TranslationLK matrix:")
     print(translation_matrix)
+
+    print ("\n translationCorr demo: TransA2 , TransB2:")
+    translation_matrix = findTranslationCorr(img_1, img_2)
+    
+    # Print the resulting translation matrix
+    print("Real Translation matrix:")
+    print(real_translation)
+    print("My predict TranslationCorr matrix:")
+    print(translation_matrix)
+
 
     print ("\n RigidLK demo: rigidA1 , rigidB1:")
     im1 =  cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2GRAY)
@@ -69,6 +79,15 @@ def hierarchicalkDemo(img_path):
     cv2.imwrite("imRigidB1.jpg", im2)
 
     print ("My predict rigid matrix: ")
+    print(translation_matrix)
+
+    print ("\n RigidCorr demo: RigidA2 , RigidB2:")
+    translation_matrix = findRigidCorr(img_1, img_2)
+    
+    # Print the resulting translation matrix
+    print("Real Rotation matrix:")
+    print(real_translation)
+    print("My predict RigidCorr matrix:")
     print(translation_matrix)
 
 
