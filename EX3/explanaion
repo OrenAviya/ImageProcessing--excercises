@@ -1,0 +1,108 @@
+# ** findTranslationLK:**
+
+Explanation:
+
+The function takes two grayscale images, im1 and im2, as inputs.
+It sets the parameters for the Lucas-Kanade optical flow algorithm.
+Using cv2.goodFeaturesToTrack(), it finds feature points in the first image, im1.
+The cv2.calcOpticalFlowPyrLK() function calculates the optical flow between im1 and im2 using the Lucas-Kanade method. It returns the tracked feature points in features2, the status of each feature point in status, and the errors between the tracked points and the actual points in _.
+The function filters out the feature points that were successfully tracked (status equals 1) and stores them in good1 and good2.
+It calculates the mean displacement in the x and y directions by subtracting the x and y coordinates of good1 from good2 and taking their mean.
+Finally, it returns the translation matrix as a numpy array [dx, dy].
+The Lucas-Kanade method estimates the translation parameters by finding the best fit between the feature points in the two images, minimizing the error between the tracked points and the actual points. The resulting translation matrix represents the amount of shift between the two images in the x and y directions.
+
+# **find RigidLK ** 
+
+To find the parameters for a rigid transformation (translation + rotation) using the Lucas-Kanade method, you can follow a similar approach as in the translation-only case. However, instead of estimating the translation vector, you will estimate the translation vector and rotation angle.
+
+Explanation:
+
+The findRigidLK function takes two grayscale images, im1 and im2, as inputs.
+It sets the parameters for the Lucas-Kanade optical flow algorithm.
+Using cv2.goodFeaturesToTrack(), it finds feature points in the first image, im1.
+The cv2.calcOpticalFlowPyrLK() function calculates the optical flow between im1 and im2 using the Lucas-Kanade method. It returns the tracked feature points in features2, the status of each feature point in status, and the errors between the tracked points and the actual points in _.
+The function filters out the feature points that were successfully tracked (status equals 1) and stores them in good1 and good2.
+It estimates the translation vector by calculating the mean displacement in the x and y directions, similar to the translation-only case.
+It estimates the rotation angle by calculating the mean of the arctangent of the y-coordinate difference divided by the x-coordinate difference between the corresponding points.
+Finally, it returns the rigid transformation matrix as a numpy array [dx, dy, dtheta], where dx and dy represent the translation
+
+# fing translation corralalation
+ 
+To find the parameters for translation using the correlation method, you can utilize the cv2.matchTemplate() function provided by OpenCV. This function performs template matching between two images to find the best match. In the case of translation, you can use a small patch from the first image as the template and search for its best match in the second image.
+
+Explanation:
+
+The findTranslationCorr function takes two grayscale images, im1 and im2, as inputs.
+It normalizes the images to the range [0, 1] using cv2.normalize() for better template matching results.
+Using cv2.matchTemplate(), it performs template matching with the correlation method. It compares norm_im1 as the template with norm_im2 as the search image.
+The result of the template matching is stored in the result array.
+It finds the best match location by finding the minimum value in the result array using cv2.minMaxLoc(). The minimum value represents the highest correlation.
+The x and y coordinates of the best match location are extracted as dx and dy, respectively.
+Finally, it returns the translation matrix as a numpy array [dx, dy].
+
+# findRigidCorr:
+
+Explanation:
+
+The findRigidCorr function takes two grayscale images, im1 and im2, as inputs.
+It normalizes the images to the range [0, 1] using cv2.normalize() for better template matching results.
+Using cv2.matchTemplate(), it performs template matching with the correlation method. It compares norm_im1 as the template with norm_im2 as the search image.
+The result of the template matching is stored in the result array.
+It finds the best match location by finding the minimum value in the result array using cv2.minMaxLoc(). The minimum value represents the highest correlation.
+The x and y coordinates of the best match location are extracted as dx and dy, respectively.
+It calculates the rotation angle by computing the arctan2 between the displacement (dx, dy) and the center of the image (cx, cy).
+Finally, it returns the rigid transformation matrix as a numpy array [dx, dy, theta], where dx and dy represent the translation and theta represents the rotation angle in degrees.
+
+
+# gaussianPyr function that creates a Gaussian pyramid for a given image:
+
+Explanation:
+
+The gaussianPyr function takes an image img and the number of pyramid levels as inputs.
+It initializes the pyramid list with the original image.
+It iterates from level 1 to levels - 1.
+For each level, it applies Gaussian blur to the previous level image using cv2.filter2D and cv2.getGaussianKernel. The kernel_size is calculated based on the provided formula.
+After blurring, it downsamples the image (by 0.5) using cv2.pyrDown.
+The downsampled image is then added to the pyramid list.
+Finally, it returns the pyramid list, which contains the Gaussian pyramid images at different levels.
+
+# Laplacian Pyramids:
+Explanation:
+
+laplacianReduce function:
+
+The function takes an image img and the number of pyramid levels as inputs.
+It initializes an empty pyramid list.
+It iterates through each level from 0 to levels-1.
+For the first level, it applies Gaussian blur to the original image using cv2.GaussianBlur and appends the difference between the original image and the blurred image to the pyramid.
+For subsequent levels, it downsamples the previous level image using cv2.pyrDown, applies Gaussian blur, and appends the difference between the downsampled and blurred image to the pyramid.
+Finally, it returns the pyramid list, which contains the Laplacian pyramid images at different levels.
+
+laplacianExpand function:
+
+The function takes a Laplacian pyramid lap_pyr as input.
+It determines the number of levels in the pyramid.
+It starts with the highest level image in the pyramid as the reconstructed image.
+It iterates from the second-to-last level to the first level in reverse order.
+For each level, it expands the reconstructed image using cv2.pyrUp and adds the corresponding level image from the Laplacian pyramid to it.
+Finally, it returns the reconstructed image, which is the original image restored from the Laplacian pyramid.
+
+# pyramid blend:
+Explanation:
+
+The pyrBlend function takes in two input images (img_1 and img_2), a blend mask (mask), and the number of pyramid levels (levels).
+It first checks if the images and the mask have compatible shapes.
+It generates Gaussian pyramids for img_1, img_2, and mask using cv2.pyrDown.
+Then, it blends the images at each level of the pyramid by multiplying img_1 with mask and img_2 with (1 - mask).
+The blended images at each level are stored in the blended_pyr list.
+Next, it reconstructs the blended image from the pyramid by iteratively upsampling the blended image using cv2.pyrUp and adding the corresponding blended image from the pyramid.
+The reconstructed blended image is stored in blended_img.
+Finally, it computes the naive blend by directly combining img_1 and img_2 using the blend mask, and returns both the naive blend and the blended image.
+
+
+
+
+
+
+
+
