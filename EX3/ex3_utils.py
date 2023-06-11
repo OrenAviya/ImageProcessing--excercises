@@ -102,6 +102,10 @@ def opticalFlow(im1: np.ndarray, im2: np.ndarray, step_size=10, win_size=5) -> t
     else:
         gray2 = im2.copy()
 
+ # if the images don't have the same shape we will throw an error
+    if im1.shape != im2.shape:
+        raise Exception ("The images must be in the same size")
+
     # Convert images to float32
     gray1 = im1.astype(np.float32)
     gray2 = im2.astype(np.float32)
@@ -255,6 +259,45 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int, stepSize: int, 
     :return: A 3d array, with a shape of (m, n, 2),
     where the first channel holds U, and the second V.
     """
+    # ********
+    
+    uv_return = []
+    xy_return = []
+    img1_pyr = gaussianPyr(img1, k)
+    img2_pyr = gaussianPyr(img2, k)
+    # entering the last pyramid
+    x_y_prev, u_v_prev = opticalFlow(img1_pyr[-1], img2_pyr[-1], stepSize, winSize)
+    x_y_prev = list(x_y_prev)
+    u_v_prev = list(u_v_prev)
+    for i in range(1, k):
+        # find optical flow for this level
+        x_y_i, uv_i = opticalFlow(img1_pyr[-1 - i], img2_pyr[-1 - i], stepSize, winSize)
+        uv_i = list(uv_i)
+        x_y_i = list(x_y_i)
+        for g in range(len(x_y_i)):
+            x_y_i[g] = list(x_y_i[g])
+            # uv_i[g] = list(uv_i[g])
+        # update uv according to formula
+        for j in range(len(x_y_prev)):
+            x_y_prev[j] = [element * 2 for element in x_y_prev[j]]
+            u_v_prev[j] = [element * 2 for element in u_v_prev[j]]
+        # If location of movements we found are new then append them, else add them to the proper location
+        for j in range(len(x_y_i)):
+            if x_y_i[j] in x_y_prev:
+                u_v_prev[j] += uv_i[j]
+            else:
+                x_y_prev.append(x_y_i[j])
+                u_v_prev.append(uv_i[j])
+    # now we shall change uv and xy to a 3 dimensional array
+    arr3d = np.zeros(shape=(img1.shape[0], img1.shape[1], 2))
+    for x in range(img1.shape[0]):
+        for y in range(img1.shape[1]):
+            if [y, x] not in x_y_prev:
+                arr3d[x, y] = [0, 0]
+            else:
+                arr3d[x, y] = u_v_prev[x_y_prev.index([y, x])]
+    return arr3d
+    # ********
      # Convert images to grayscale
     if len(img1.shape) > 2:
         img1_gray = cv2.cvtColor(img1, cv2.COLOR_BGR2GRAY)
@@ -266,6 +309,10 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int, stepSize: int, 
     else:
         img2_gray = img2.copy()
    
+    # if the images don't have the same shape we will throw an error
+    if img1.shape != img2.shape:
+        raise Exception ("The images must be in the same size")
+
     # Create image pyramids
     pyramid1 = [img1_gray]
     pyramid2 = [img2_gray]
@@ -286,8 +333,19 @@ def opticalFlowPyrLK(img1: np.ndarray, img2: np.ndarray, k: int, stepSize: int, 
         # Calculate optical flow for the current level
         u, v = opticalFlow(pyramid1[level], pyramid2[level], stepSize, winSize)
 
+     # Reshape u and v to match the shape of scaled_optical_flow
+        # u_resized = cv2.resize(u, scaled_optical_flow.shape[::-1])
+        # v_resized = cv2.resize(v, scaled_optical_flow.shape[::-1])
+
+        # Resize u and v to match the shape of scaled_optical_flow
+        u_resized = cv2.resize(u, (scaled_optical_flow.shape[1], scaled_optical_flow.shape[0]), interpolation=cv2.INTER_LINEAR)
+        v_resized = cv2.resize(v, (scaled_optical_flow.shape[1], scaled_optical_flow.shape[0]), interpolation=cv2.INTER_LINEAR)
+
         # Update optical flow with current level's flow
-        optical_flow = scaled_optical_flow + np.stack([u, v], axis=2) * 2.0
+        # optical_flow = scaled_optical_flow + np.stack([u, v], axis=2) * 2.0
+        
+        # Update optical flow with current level's flow
+        optical_flow = scaled_optical_flow + np.stack([u_resized, v_resized], axis=2)
 
     return optical_flow
 
@@ -329,9 +387,11 @@ def findTranslationLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     # Calculate the mean displacement in x and y directions
     dx = np.mean(good2[:, 0] - good1[:, 0])
     dy = np.mean(good2[:, 1] - good1[:, 1])
+# Create the translation matrix
+    translation_matrix = np.float32([[1, 0, dx], [0, 1, dy]])
 
     # Return the translation matrix
-    return np.array([dx, dy])
+    return translation_matrix
 
 
 def findTranslationLK0(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
@@ -365,8 +425,11 @@ def findTranslationLK0(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     dx = np.mean(good2[:, 0, 0] - good1[:, 0, 0])
     dy = np.mean(good2[:, 0, 1] - good1[:, 0, 1])
 
+ # Create the translation matrix
+    translation_matrix = np.float32([[1, 0, dx], [0, 1, dy]])
+
     # Return the translation matrix
-    return np.array([dx, dy])
+    return translation_matrix
 
 
 def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
@@ -398,6 +461,123 @@ def findRigidLK(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     # Return the rigid transformation matrix [dx, dy, angle]
     return np.array([dx, dy, dtheta])
 
+import cv2
+import numpy as np
+
+def estimate_translation_matrix(image1, image2):
+    # Convert the images to numpy arrays
+    image1 = np.array(image1, dtype=np.float32)
+    image2 = np.array(image2, dtype=np.float32)
+    
+    # trying to improve the model with cleaning nnoises:
+    # denoised_image1 = cv2.GaussianBlur(image1, (3, 3), 0)
+    # denoised_image2 = cv2.GaussianBlur(image2, (3, 3), 0)
+    denoised_image1 = cv2.medianBlur(image1, 3)
+    denoised_image2 = cv2.medianBlur(image2, 3)
+    
+    # Normalize the images to have zero mean and unit variance
+    image1_normalized = cv2.normalize(denoised_image1, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    image2_normalized = cv2.normalize(denoised_image2, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+
+    # Calculate the cross-correlation
+    cross_correlation = cv2.matchTemplate(image1_normalized, image2_normalized, cv2.TM_CCORR_NORMED)
+    
+    # Find the position of the maximum correlation
+    min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(cross_correlation)
+    print (f'minval: {min_val} , maxval: {max_val} , minloc: {min_loc} , maxloc: {max_loc}')
+    translation_x = max_loc[0]
+    translation_y = max_loc[1]
+    
+    # Create the translation matrix
+    translation_matrix = np.float32([[1, 0, translation_x], [0, 1, translation_y]])
+
+    return translation_matrix
+
+
+def findTranslationCorr0(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
+    """
+    :param im1: input image 1 in grayscale format.
+    :param im2: image 1 after Translation.
+    :return: Translation matrix by correlation.
+    """
+     # Convert the images to numpy arrays
+    im1 = np.array(im1, dtype=np.float32)
+    im2= np.array(im2, dtype=np.float32)
+
+    # Normalize the images to have zero mean and unit variance
+    image1_normalized = cv2.normalize(im1, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    image2_normalized = cv2.normalize(im2, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+
+    # Calculate the cross-correlation
+    cross_correlation = cv2.matchTemplate(image1_normalized, image2_normalized, cv2.TM_CCORR_NORMED)
+    correlation = np.max(cross_correlation)
+    return correlation
+ 
+     # Normalize the images
+    norm_im1 = cv2.normalize(im1, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    norm_im2 = cv2.normalize(im2, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
+    # Preprocess the images if necessary
+
+    # Build image pyramid for both images
+    pyramid_im1 = [im1]
+    pyramid_im2 = [im2]
+    for _ in range(3):  # Use 3 levels of the pyramid (adjust as needed)
+        im1 = cv2.pyrDown(im1)
+        im2 = cv2.pyrDown(im2)
+        pyramid_im1.append(im1)
+        pyramid_im2.append(im2)
+
+    # Initialize variables to store the best alignment parameters and correlation score
+    best_shift = (0, 0)
+    best_score = 0.0
+
+    # Iterate over the pyramid levels starting from the coarsest
+    for level in range(len(pyramid_im1) - 1, -1, -1):
+        scaled_im1 = pyramid_im1[level]
+        scaled_im2 = pyramid_im2[level]
+
+        # Determine the search range based on scaled image dimensions
+        shift_range_x = int(scaled_im1.shape[1] * 0.1)  # 10% of scaled image width
+        shift_range_y = int(scaled_im1.shape[0] * 0.1)  # 10% of scaled image height
+
+        # Iterate over the range of possible shifts and calculate correlation scores
+        for shift_x in range(-shift_range_x, shift_range_x + 1):
+            for shift_y in range(-shift_range_y, shift_range_y + 1):
+                print("in for loop...")
+                # Apply the shift to scaled_im1
+                shifted_im1 = np.roll(scaled_im1, shift_x, axis=1)
+                shifted_im1 = np.roll(shifted_im1, shift_y, axis=0)
+
+                # Calculate the correlation coefficient between shifted_im1 and scaled_im2
+                correlation = np.corrcoef(shifted_im1.flatten(), scaled_im2.flatten())[0, 1]
+
+                # Update the best alignment parameters if the correlation is higher
+                if correlation > best_score:
+                    best_score = correlation
+                    best_shift = (shift_x * 2 ** level, shift_y * 2 ** level)  # Scale shift by pyramid level
+
+    return best_shift
+
+
+def findCorrelation(img1: np.ndarray, img2: np.ndarray):
+    """
+    This function looks for two points, one from @img1 and second from @img2.
+    The two points are the ones with the highest correlation.
+    :param img1: first image
+    :param img2: second image
+    :return: 2 points - x1, y1, x2, y2
+    """
+    # img1[img1 == 0] = np.float("inf")
+    # img2[img2 == 0] = np.float("inf")
+    img_shape = np.max(img1.shape) // 2
+    im1FFT = np.fft.fft2(np.pad(img1, img_shape))
+    im2FFT = np.fft.fft2(np.pad(img2, img_shape))
+    prod = im1FFT * im2FFT.conj()
+    res = np.fft.fftshift(np.fft.ifft2(prod))
+    correlation = res.real[1 + img_shape:-img_shape + 1, 1 + img_shape:-img_shape + 1]
+    p1y, p1x = np.unravel_index(np.argmax(correlation), correlation.shape)
+    p2y, p2x = np.array(img2.shape) // 2
+    return p1x, p1y, p2x, p2y
 
 
 def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
@@ -406,45 +586,54 @@ def findTranslationCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     :param im2: image 1 after Translation.
     :return: Translation matrix by correlation.
     """
-     # Normalize the images
-    norm_im1 = cv2.normalize(im1, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    norm_im2 = cv2.normalize(im2, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-
-    # Perform template matching using correlation
-    result = cv2.matchTemplate(norm_im2, norm_im1, cv2.TM_CCORR_NORMED)
-
-    # Find the best match location
-    min_val, _, min_loc, _ = cv2.minMaxLoc(result)
-    dx, dy = min_loc
-
-    # Return the translation matrix [dx, dy]
-    return np.array([dx, dy])
-
+    X1, Y1, X2, Y2 = findCorrelation(im1, im2)
+    return np.array([[1, 0, (X2 - X1 - 1)], [0, 1, (Y2 - Y1 - 1)], [0, 0, 1]], dtype=np.float)
 
 def findRigidCorr(im1: np.ndarray, im2: np.ndarray) -> np.ndarray:
     """
     :param im1: input image 1 in grayscale format.
     :param im2: image 1 after Rigid.
     :return: Rigid matrix by correlation.
-    """
-     # Normalize the images
-    norm_im1 = cv2.normalize(im1, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
-    norm_im2 = cv2.normalize(im2, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32F)
 
-    # Perform template matching using correlation
-    result = cv2.matchTemplate(norm_im2, norm_im1, cv2.TM_CCORR_NORMED)
+"""
 
-    # Find the best match location
-    min_val, _, min_loc, _ = cv2.minMaxLoc(result)
-    dx, dy = min_loc
+def estimate_rotation_translation(image1, image2):
+    # Convert images to grayscale
+    gray1 = image1
+    gray2 = image2
 
-    # Calculate the rotation angle
-    h, w = im1.shape[:2]
-    cx, cy = w // 2, h // 2
-    theta = np.arctan2(dy - cy, dx - cx) * (180.0 / np.pi)
+    # Initialize SIFT detector
+    sift = cv2.SIFT_create()
 
-    # Return the rigid transformation matrix [dx, dy, theta]
-    return np.array([dx, dy, theta])
+    # Detect keypoints and compute descriptors
+    keypoints1, descriptors1 = sift.detectAndCompute(gray1, None)
+    keypoints2, descriptors2 = sift.detectAndCompute(gray2, None)
+
+    # Match keypoints
+    matcher = cv2.BFMatcher()
+    matches = matcher.match(descriptors1, descriptors2)
+
+    # Sort matches by distance
+    matches = sorted(matches, key=lambda x: x.distance)
+
+    # Select top matches
+    num_matches = int(len(matches) * 0.15)
+    matches = matches[:num_matches]
+
+    # Get corresponding keypoints
+    src_pts = np.float32([keypoints1[match.queryIdx].pt for match in matches]).reshape(-1, 1, 2)
+    dst_pts = np.float32([keypoints2[match.trainIdx].pt for match in matches]).reshape(-1, 1, 2)
+
+    # Estimate affine transformation matrix
+    transformation_matrix, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts)
+
+    # Extract rotation angle and translation
+    rotation_angle = np.arctan2(transformation_matrix[1, 0], transformation_matrix[0, 0]) * 180.0 / np.pi
+    dx = transformation_matrix[0, 2]
+    dy = transformation_matrix[1, 2]
+
+    return rotation_angle, dx, dy
+
 
 
 def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
@@ -456,20 +645,18 @@ def warpImages(im1: np.ndarray, im2: np.ndarray, T: np.ndarray) -> np.ndarray:
     :return: warp image 2 according to T and display both image1
     and the wrapped version of the image2 in the same figure.
     """
-    h ,w = im2.shape
+    h, w = im2.shape
+    X, Y = np.meshgrid(range(w), range(h))
+    I_new = np.array([X.flatten(), Y.flatten(), np.ones_like(X.flatten())])
 
-    X ,Y = np.meshgrid(range(w) , range(h) )
-    I_new = np.array([X.flatten() , Y.flatten() , np.ones_like(X.flatten())])
-
-    I_old = (np.linalg.inv(T))@ I_new
-    mask1 = (I_old[0,:] > w ) | (I_old[0,:] < 0 )
-    mask2 = (I_old[1,:] > h ) | (I_old[1,:] < 0)
-    I_old[0,:][mask1] = 0 
-    I_old[1,:][mask2] = 0
-    new_img = im2[I_old[1,:].astype(int) , I_old[0,:].astype(int)]
-
-    return new_img
-
+    I_old = (np.linalg.inv(T)) @ I_new
+    mask1 = (I_old[0, :] > w) | (I_old[0, :] < 0)
+    mask2 = (I_old[1, :] > h) | (I_old[1, :] < 0)
+    I_old[0, :][mask1] =0
+    I_old[1, :][mask2] =0
+    new_img = im2[I_old[1, :].astype(int), I_old[0, :].astype(int)]
+    
+    return (new_img.reshape(im2.shape))
 
 # ---------------------------------------------------------------------------
 # --------------------- Gaussian and Laplacian Pyramids ---------------------
